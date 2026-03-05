@@ -61,11 +61,20 @@ class QSenseBleClient:
 
     # -- Connection --------------------------------------------------------
 
-    async def connect(self) -> None:
-        """Connect to the stored device and subscribe to TX notifications."""
-        if self._device is None:
-            raise RuntimeError("No device found. Call scan() first.")
-        self._client = BleakClient(self._device)
+    async def connect(self, device: Any | None = None) -> None:
+        """Connect to a QSense device and subscribe to TX notifications.
+
+        Parameters
+        ----------
+        device : BLE device object or None
+            A specific device returned by :meth:`scan`.  When *None*, the
+            first device discovered during the last :meth:`scan` call is used.
+        """
+        target = device if device is not None else self._device
+        if target is None:
+            raise RuntimeError("No device found. Call scan() first or pass a device.")
+        self._device = target
+        self._client = BleakClient(target)
         await self._client.connect()
         await self._client.start_notify(NUS_TX_UUID, self._notification_handler)
 

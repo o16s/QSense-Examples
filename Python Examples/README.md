@@ -51,6 +51,7 @@ python stream_example.py --rate 200 --duration 10
 | `qsense_parser.py` | Pure-Python Core Interface packet builder & parser (no BLE dependency) |
 | `qsense_ble.py` | Async BLE client using [bleak](https://github.com/hbldh/bleak) — scan, connect, stream |
 | `stream_example.py` | Runnable CLI example that discovers a sensor and prints live IMU data |
+| `multi_stream_example.py` | CLI example streaming from **two** sensors concurrently |
 | `requirements.txt` | Python dependencies |
 | `tests/` | Unit tests (`pytest`) for both modules |
 
@@ -81,6 +82,54 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## Multi-Device Streaming (2+ Sensors)
+
+Each `QSenseBleClient` manages its own BLE connection, so streaming from
+multiple sensors simultaneously only requires **one client per device**.
+Use `asyncio.gather` to run the streams concurrently:
+
+```python
+import asyncio
+from qsense_ble import QSenseBleClient
+
+async def main():
+    # One scan discovers all nearby sensors
+    scout = QSenseBleClient()
+    devices = await scout.scan(timeout=5.0)
+    assert len(devices) >= 2, "Need at least 2 sensors"
+
+    # Create a separate client for each sensor
+    client_a = QSenseBleClient(sampling_rate=200)
+    client_b = QSenseBleClient(sampling_rate=200)
+    await client_a.connect(device=devices[0])
+    await client_b.connect(device=devices[1])
+
+    # Stream both concurrently
+    async def print_stream(label, client):
+        async for frame in client.stream(duration=10):
+            for sample in frame["samples"]:
+                print(label, sample)
+
+    await asyncio.gather(
+        print_stream("A", client_a),
+        print_stream("B", client_b),
+    )
+
+    await client_a.disconnect()
+    await client_b.disconnect()
+
+asyncio.run(main())
+```
+
+Or run the ready-made example:
+
+```bash
+python multi_stream_example.py --duration 30 --rate 200
+```
+
+See [`SPEC.md`](SPEC.md) §6.2 for multi-sensor rate limits (e.g. 1–2
+sensors: 400 Hz max, 3–6: 200 Hz).
 
 ## High-Rate Streaming (up to 800 Hz)
 

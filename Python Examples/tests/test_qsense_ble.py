@@ -97,6 +97,95 @@ class TestConnect:
             MockClient.assert_called_once_with(fake_dev)
             mock_conn.connect.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_connect_with_explicit_device(self):
+        """connect(device=...) should use the supplied device, not _device."""
+        fake_dev_a = _fake_device(name="QSense-A", address="AA:AA:AA:AA:AA:AA")
+        fake_dev_b = _fake_device(name="QSense-B", address="BB:BB:BB:BB:BB:BB")
+        with patch("qsense_ble.BleakClient") as MockClient:
+            mock_conn = AsyncMock()
+            mock_conn.connect = AsyncMock()
+            mock_conn.start_notify = AsyncMock()
+            MockClient.return_value = mock_conn
+
+            client = QSenseBleClient()
+            client._device = fake_dev_a  # scan stored device A
+            await client.connect(device=fake_dev_b)  # but we explicitly pass B
+            MockClient.assert_called_once_with(fake_dev_b)
+
+    @pytest.mark.asyncio
+    async def test_connect_no_device_raises(self):
+        """connect() without prior scan and no explicit device should raise."""
+        client = QSenseBleClient()
+        with pytest.raises(RuntimeError, match="No device found"):
+            await client.connect()
+
+
+# ---------------------------------------------------------------------------
+# Multi-device
+# ---------------------------------------------------------------------------
+
+class TestMultiDevice:
+    @pytest.mark.asyncio
+    async def test_two_clients_connect_to_different_devices(self):
+        """Two independent clients can connect to two different devices."""
+        dev_a = _fake_device(name="QSense-A", address="AA:AA:AA:AA:AA:AA")
+        dev_b = _fake_device(name="QSense-B", address="BB:BB:BB:BB:BB:BB")
+
+        with patch("qsense_ble.BleakClient") as MockClient:
+            mock_conn_a = AsyncMock()
+            mock_conn_a.connect = AsyncMock()
+            mock_conn_a.start_notify = AsyncMock()
+            mock_conn_a.disconnect = AsyncMock()
+
+            mock_conn_b = AsyncMock()
+            mock_conn_b.connect = AsyncMock()
+            mock_conn_b.start_notify = AsyncMock()
+            mock_conn_b.disconnect = AsyncMock()
+
+            MockClient.side_effect = [mock_conn_a, mock_conn_b]
+
+            client_a = QSenseBleClient()
+            client_b = QSenseBleClient()
+
+            await client_a.connect(device=dev_a)
+            await client_b.connect(device=dev_b)
+
+            # Each client got its own BleakClient with the correct device
+            calls = MockClient.call_args_list
+            assert calls[0][0][0] is dev_a
+            assert calls[1][0][0] is dev_b
+
+            # Each client has an independent connection
+            mock_conn_a.connect.assert_awaited_once()
+            mock_conn_b.connect.assert_awaited_once()
+
+            await client_a.disconnect()
+            await client_b.disconnect()
+            mock_conn_a.disconnect.assert_awaited_once()
+            mock_conn_b.disconnect.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_two_clients_receive_independent_notifications(self):
+        """Notifications on one client do not leak to the other."""
+        dev_a = _fake_device(name="QSense-A", address="AA:AA:AA:AA:AA:AA")
+        dev_b = _fake_device(name="QSense-B", address="BB:BB:BB:BB:BB:BB")
+
+        client_a = QSenseBleClient()
+        client_b = QSenseBleClient()
+
+        received_a: list = []
+        received_b: list = []
+        client_a.on_stream_data = lambda frame: received_a.append(frame)
+        client_b.on_stream_data = lambda frame: received_b.append(frame)
+
+        notification = _make_stream_notification(mode=1, buffering=1)
+
+        # Only client_a receives a notification
+        client_a._notification_handler(None, notification)
+        assert len(received_a) == 1
+        assert len(received_b) == 0
+
 
 # ---------------------------------------------------------------------------
 # Streaming
