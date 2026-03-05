@@ -17,8 +17,8 @@ import asyncio
 from qsense_ble import QSenseBleClient
 
 
-async def main(duration: float, rate: float | None) -> None:
-    client = QSenseBleClient(sampling_rate=rate)
+async def main(duration: float, sampling_rate: float | None) -> None:
+    client = QSenseBleClient(sampling_rate=sampling_rate)
 
     # 1. Scan
     print("Scanning for QSense sensors …")
@@ -34,7 +34,7 @@ async def main(duration: float, rate: float | None) -> None:
     print("Connected.")
 
     # 3. Stream
-    rate_info = f" at {rate} Hz" if rate else ""
+    rate_info = f" at {sampling_rate} Hz" if sampling_rate else ""
     print(f"Streaming for {duration} seconds{rate_info} (Ctrl+C to stop early) …\n")
     try:
         async for frame in client.stream(duration=duration):
@@ -69,7 +69,8 @@ if __name__ == "__main__":
         "--rate",
         type=float,
         default=None,
+        dest="sampling_rate",
         help="Sensor sampling rate in Hz (e.g. 200). Enables per-sample timestamps.",
     )
     args = parser.parse_args()
-    asyncio.run(main(args.duration, args.rate))
+    asyncio.run(main(args.duration, args.sampling_rate))

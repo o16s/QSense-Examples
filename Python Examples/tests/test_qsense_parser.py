@@ -310,7 +310,7 @@ class TestPerSampleTimestamps:
             assert s["timestamp"] == expected_ts
         # Total span should be (12-1) * 5ms = 55ms
         span = result["samples"][-1]["timestamp"] - result["samples"][0]["timestamp"]
-        assert span == pytest.approx(timedelta(milliseconds=55))
+        assert span == timedelta(milliseconds=55)
 
     def test_quat_mode_per_sample_timestamps(self):
         """Quaternion mode with buffering also gets per-sample timestamps."""
