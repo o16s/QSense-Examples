@@ -8,11 +8,70 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from qsense_parser import (
+    ACC_SCALE_FACTORS,
+    GYR_SCALE_FACTORS,
+    ACC_RANGES,
+    GYR_RANGES,
     CoreInterfaceParser,
     Raw9Dof,
     StreamHeader,
     parse_stream_payload,
 )
+
+
+# ---------------------------------------------------------------------------
+# Datasheet conformance
+# ---------------------------------------------------------------------------
+
+class TestDatasheetConstants:
+    """Verify scale factors and ranges match the QSense sensor datasheet."""
+
+    def test_acc_scale_factor_count(self):
+        assert len(ACC_SCALE_FACTORS) == 4
+
+    def test_acc_ranges_count(self):
+        assert len(ACC_RANGES) == 4
+
+    def test_acc_scale_2g(self):
+        # ±2g → 0.061 mg/LSB = 0.000061 g/LSB (index 0)
+        assert ACC_SCALE_FACTORS[0] == pytest.approx(0.000061)
+
+    def test_acc_scale_16g(self):
+        # ±16g → 0.488 mg/LSB = 0.000488 g/LSB (index 1)
+        assert ACC_SCALE_FACTORS[1] == pytest.approx(0.000488)
+
+    def test_gyr_scale_125dps(self):
+        # ±125 dps → 4.375 mdps/LSB = 0.004375 dps/LSB (index 1)
+        assert GYR_SCALE_FACTORS[1] == pytest.approx(0.004375)
+
+    def test_gyr_scale_2000dps(self):
+        # ±2000 dps → 70 mdps/LSB = 0.07 dps/LSB (index 6)
+        assert GYR_SCALE_FACTORS[6] == pytest.approx(0.07)
+
+    def test_gyr_unused_indices_are_zero(self):
+        # Indices 3 and 5 are unused by hardware
+        assert GYR_SCALE_FACTORS[3] == 0.0
+        assert GYR_SCALE_FACTORS[5] == 0.0
+
+    def test_gyr_ranges_unused_indices_are_empty(self):
+        assert GYR_RANGES[3] == ""
+        assert GYR_RANGES[5] == ""
+
+    def test_max_sampling_rate(self):
+        assert CoreInterfaceParser.MAX_SAMPLING_RATE == 800
+
+    def test_max_rate_by_sensor_count(self):
+        rates = CoreInterfaceParser.MAX_RATE_BY_SENSOR_COUNT
+        assert rates[1] == 400
+        assert rates[2] == 400
+        assert rates[3] == 200
+        assert rates[6] == 200
+        assert rates[7] == 100
+        assert rates[12] == 100
+
+    def test_mag_scale_factor(self):
+        # ±50 Gauss → 1.5 mGauss/LSB = 0.0015 Gauss/LSB
+        assert Raw9Dof.MAG_SCALE == pytest.approx(0.0015)
 
 
 # ---------------------------------------------------------------------------

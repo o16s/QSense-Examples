@@ -11,6 +11,22 @@ No QSense USB dongle required — connects directly from a **Raspberry Pi** (or 
 | **OS** | Raspberry Pi OS / Linux |
 | **Python** | 3.9+ |
 
+## Sensor Specifications
+
+| Parameter | Value |
+|-----------|-------|
+| IMU | 9-DOF (accelerometer, gyroscope, magnetometer) |
+| Sampling rate | 1 – 800 Hz (application dependent) |
+| Multi-sensor rates | 1–2 sensors: 400 Hz, 3–6: 200 Hz, 7–12: 100 Hz |
+| Synchronization | < 60 µs (TimeSync mode) |
+| Latency | 7.5 – 15 ms (mode dependent) |
+| Orientation accuracy | Static < 1°, drift < 0.5° |
+| Wireless | BLE 5.2, 2 Mbps, Data Length Extension |
+| Battery | 140 mAh Li-Po (12 – 20 h depending on mode) |
+| Size / Weight | 38.9 × 24.3 × 10.2 mm, 8 g, IP67 |
+
+See [`SPEC.md`](SPEC.md) §6 for detailed timing and synchronization documentation.
+
 ## Quick Start
 
 ```bash
@@ -66,19 +82,38 @@ async def main():
 asyncio.run(main())
 ```
 
-## High-Rate Streaming (200 Hz)
+## High-Rate Streaming (up to 800 Hz)
 
-At high sampling rates the sensor **buffers** multiple samples per BLE packet
-(e.g. 12 raw samples at 200 Hz).  Pass `sampling_rate` to get **per-sample
-timestamps** interpolated from the packet header:
+The sensor supports sampling rates from **1 to 800 Hz**.  At high rates the
+sensor **buffers** multiple samples per BLE packet (e.g. 12 raw samples at
+200 Hz).  Pass `sampling_rate` to get **per-sample timestamps** interpolated
+from the packet header:
 
 ```python
 client = QSenseBleClient(sampling_rate=200)
 ```
 
+The `sampling_rate` parameter is validated against the hardware maximum
+(800 Hz).
+
+### Multi-Sensor Rate Limits (via BLE Dongle)
+
+| Sensors | Max Rate |
+|---------|----------|
+| 1 – 2 | 400 Hz |
+| 3 – 6 | 200 Hz |
+| 7 – 12 | 100 Hz |
+
+### Operating Modes
+
+- **TimeSync Mode** — continuous wireless synchronization (< 60 µs accuracy),
+  absolute timestamps, 15 ms minimum latency
+- **Low Latency Mode** — minimum 7.5 ms latency, local timestamps,
+  ≤ 2 ms/min drift
+
 Without `sampling_rate`, all samples in a packet share the same header
-timestamp.  See [`SPEC.md`](SPEC.md) §6 for details on buffering, timestamp
-interpolation, and BLE connection interval tuning.
+timestamp.  See [`SPEC.md`](SPEC.md) §6 for full details on buffering,
+timestamp interpolation, and BLE connection interval tuning.
 
 ## Protocol Summary
 

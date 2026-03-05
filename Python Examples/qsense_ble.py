@@ -37,6 +37,11 @@ class QSenseBleClient:
     def __init__(self, sampling_rate: float | None = None) -> None:
         self._device: Any | None = None
         self._client: BleakClient | None = None
+        if sampling_rate is not None and sampling_rate > CoreInterfaceParser.MAX_SAMPLING_RATE:
+            raise ValueError(
+                f"sampling_rate {sampling_rate} Hz exceeds the maximum "
+                f"supported rate of {CoreInterfaceParser.MAX_SAMPLING_RATE} Hz"
+            )
         self.sampling_rate: float | None = sampling_rate
         self.on_stream_data: Callable[[dict[str, Any]], None] | None = None
 

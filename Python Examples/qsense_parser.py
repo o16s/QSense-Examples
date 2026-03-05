@@ -51,9 +51,13 @@ class Raw9Dof:
 # Stream header
 # ---------------------------------------------------------------------------
 
+# Accelerometer scale factors in g/LSB (datasheet: 0.061 – 0.488 mg/LSB)
 ACC_SCALE_FACTORS = [0.000061, 0.000488, 0.000122, 0.000244]
+# Gyroscope scale factors in dps/LSB (datasheet: 4.375 – 70 mdps/LSB)
+# Indices 3 and 5 are unused by hardware — kept as 0.0 placeholders.
 GYR_SCALE_FACTORS = [0.008750, 0.004375, 0.0175, 0.0, 0.035, 0.0, 0.07]
 ACC_RANGES = ["2g", "16g", "4g", "8g"]
+# Sparse array: indices 3 and 5 are unused by hardware.
 GYR_RANGES = ["250dps", "125dps", "500dps", "", "1000dps", "", "2000dps"]
 DATA_MODES = ["Mixed", "Raw", "Quaternion", "Optimized", "Quat+Mag"]
 INTERFERENCE_LEVELS = [
@@ -173,6 +177,13 @@ class CoreInterfaceParser:
     STREAM_MEMORY_SIZE = 237
     WHOAMI_VALUE = 0x324D5351
     PIN_VALUE = 0x65766F6C
+
+    # Maximum supported sampling rate (Hz) per the QSense datasheet.
+    MAX_SAMPLING_RATE = 800
+
+    # Maximum sampling rate per sensor count (via QSense BLE Dongle).
+    MAX_RATE_BY_SENSOR_COUNT = {1: 400, 2: 400, 3: 200, 4: 200, 5: 200, 6: 200,
+                                7: 100, 8: 100, 9: 100, 10: 100, 11: 100, 12: 100}
 
     # -- Packet creation ---------------------------------------------------
 

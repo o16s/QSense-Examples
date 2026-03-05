@@ -188,6 +188,14 @@ class TestNotificationHandling:
         client = QSenseBleClient(sampling_rate=200)
         assert client.sampling_rate == 200
 
+    def test_sampling_rate_at_max_is_valid(self):
+        client = QSenseBleClient(sampling_rate=800)
+        assert client.sampling_rate == 800
+
+    def test_sampling_rate_exceeding_max_raises(self):
+        with pytest.raises(ValueError, match="exceeds the maximum"):
+            QSenseBleClient(sampling_rate=801)
+
 
 # ---------------------------------------------------------------------------
 # Disconnect
