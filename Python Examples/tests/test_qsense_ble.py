@@ -27,11 +27,15 @@ def _make_stream_notification(mode=1, buffering=1) -> bytes:
     """Build a Core Interface Data packet wrapping a 237-byte stream payload."""
     payload = bytearray(237)
     payload[0] = (buffering << 4) | (mode & 0x0F)
+    # Set a timestamp so per-sample timestamps are testable
+    struct.pack_into("<I", payload, 1, 1000)
+    struct.pack_into("<H", payload, 5, 0)
     # acc_range=0, gyr_range=0
     payload[9] = 0x00
-    # one raw sample
-    for i in range(9):
-        struct.pack_into("<h", payload, 10 + i * 2, (i + 1) * 100)
+    # Write raw samples (9 × int16 each)
+    for j in range(buffering):
+        for i in range(9):
+            struct.pack_into("<h", payload, 10 + j * 18 + i * 2, (i + 1) * 100)
     pkt = bytearray(7 + 237)
     pkt[0] = CoreInterfaceParser.Opcode.Data
     struct.pack_into("<I", pkt, 1, CoreInterfaceParser.STREAM_MEMORY_ADDRESS)
@@ -160,6 +164,29 @@ class TestNotificationHandling:
         assert len(received) == 1
         assert "header" in received[0]
         assert "samples" in received[0]
+
+    def test_notification_with_sampling_rate_adds_timestamps(self):
+        client = QSenseBleClient(sampling_rate=200)
+        received = []
+        client.on_stream_data = lambda frame: received.append(frame)
+
+        notification = _make_stream_notification(mode=1, buffering=3)
+        client._notification_handler(None, notification)
+
+        assert len(received) == 1
+        samples = received[0]["samples"]
+        assert len(samples) == 3
+        # Each sample should have a timestamp
+        for s in samples:
+            assert "timestamp" in s
+
+    def test_default_sampling_rate_is_none(self):
+        client = QSenseBleClient()
+        assert client.sampling_rate is None
+
+    def test_sampling_rate_can_be_set(self):
+        client = QSenseBleClient(sampling_rate=200)
+        assert client.sampling_rate == 200
 
 
 # ---------------------------------------------------------------------------

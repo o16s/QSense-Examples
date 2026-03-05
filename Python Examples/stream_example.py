@@ -4,8 +4,9 @@ stream_example.py — Stream 9DOF IMU data from a QSense sensor over BLE.
 
 Run on a Raspberry Pi (CM4 or similar with Bluetooth):
 
-    python stream_example.py              # stream for 10 seconds (default)
-    python stream_example.py --duration 30
+    python stream_example.py                      # 10 s at default rate
+    python stream_example.py --duration 30        # 30 s
+    python stream_example.py --rate 200           # 200 Hz with per-sample timestamps
 
 No dongle required — connects directly via Bluetooth Low Energy.
 """
@@ -16,8 +17,8 @@ import asyncio
 from qsense_ble import QSenseBleClient
 
 
-async def main(duration: float) -> None:
-    client = QSenseBleClient()
+async def main(duration: float, rate: float | None) -> None:
+    client = QSenseBleClient(sampling_rate=rate)
 
     # 1. Scan
     print("Scanning for QSense sensors …")
@@ -33,13 +34,20 @@ async def main(duration: float) -> None:
     print("Connected.")
 
     # 3. Stream
-    print(f"Streaming for {duration} seconds (Ctrl+C to stop early) …\n")
+    rate_info = f" at {rate} Hz" if rate else ""
+    print(f"Streaming for {duration} seconds{rate_info} (Ctrl+C to stop early) …\n")
     try:
         async for frame in client.stream(duration=duration):
             header = frame["header"]
             for i, sample in enumerate(frame["samples"]):
-                values = "  ".join(f"{k}={v:+.4f}" for k, v in sample.items())
-                print(f"[{header.timestamp:%H:%M:%S.%f}] sample {i}: {values}")
+                # Use per-sample timestamp when available, else header timestamp
+                ts = sample.get("timestamp", header.timestamp)
+                values = "  ".join(
+                    f"{k}={v:+.4f}"
+                    for k, v in sample.items()
+                    if k != "timestamp"
+                )
+                print(f"[{ts:%H:%M:%S.%f}] sample {i}: {values}")
     except KeyboardInterrupt:
         print("\nStopped by user.")
         await client.stop_streaming()
@@ -57,5 +65,11 @@ if __name__ == "__main__":
         default=10.0,
         help="Streaming duration in seconds (default: 10)",
     )
+    parser.add_argument(
+        "--rate",
+        type=float,
+        default=None,
+        help="Sensor sampling rate in Hz (e.g. 200). Enables per-sample timestamps.",
+    )
     args = parser.parse_args()
-    asyncio.run(main(args.duration))
+    asyncio.run(main(args.duration, args.rate))

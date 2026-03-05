@@ -25,11 +25,19 @@ QSENSE_NAME = "qsense"
 
 
 class QSenseBleClient:
-    """High-level async client for a single QSense sensor."""
+    """High-level async client for a single QSense sensor.
 
-    def __init__(self) -> None:
+    Parameters
+    ----------
+    sampling_rate : float or None
+        Sensor sampling rate in Hz (e.g. 200).  When set, each sample in a
+        buffered stream packet receives an interpolated per-sample timestamp.
+    """
+
+    def __init__(self, sampling_rate: float | None = None) -> None:
         self._device: Any | None = None
         self._client: BleakClient | None = None
+        self.sampling_rate: float | None = sampling_rate
         self.on_stream_data: Callable[[dict[str, Any]], None] | None = None
 
     # -- Scanning ----------------------------------------------------------
@@ -79,9 +87,10 @@ class QSenseBleClient:
         self.on_stream_data = lambda frame: queue.put_nowait(frame)
 
         await self.start_streaming()
-        deadline = asyncio.get_event_loop().time() + duration
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + duration
         try:
-            while asyncio.get_event_loop().time() < deadline:
+            while loop.time() < deadline:
                 try:
                     frame = await asyncio.wait_for(queue.get(), timeout=1.0)
                     yield frame
@@ -112,6 +121,6 @@ class QSenseBleClient:
 
     def _notification_handler(self, sender: Any, data: bytes) -> None:
         """Called by bleak for every TX notification."""
-        parsed = CoreInterfaceParser.parse_packet(data)
+        parsed = CoreInterfaceParser.parse_packet(data, sampling_rate=self.sampling_rate)
         if parsed is not None and self.on_stream_data is not None:
             self.on_stream_data(parsed)

@@ -209,8 +209,15 @@ class CoreInterfaceParser:
     # -- Packet parsing ----------------------------------------------------
 
     @staticmethod
-    def parse_packet(packet: bytes) -> dict[str, Any] | None:
-        """Parse a Core Interface packet and return a dict of fields."""
+    def parse_packet(
+        packet: bytes,
+        sampling_rate: float | None = None,
+    ) -> dict[str, Any] | None:
+        """Parse a Core Interface packet and return a dict of fields.
+
+        When *sampling_rate* (Hz) is provided and the packet contains stream
+        data, per-sample timestamps are interpolated.
+        """
         if len(packet) < 7:
             return None
 
@@ -225,7 +232,7 @@ class CoreInterfaceParser:
             address == CoreInterfaceParser.STREAM_MEMORY_ADDRESS
             and length == CoreInterfaceParser.STREAM_MEMORY_SIZE
         ):
-            return parse_stream_payload(data)
+            return parse_stream_payload(data, sampling_rate=sampling_rate)
 
         return {"opcode": opcode, "address": address, "length": length}
 
@@ -265,8 +272,17 @@ class CoreInterfaceParser:
 # Stream payload parsing
 # ---------------------------------------------------------------------------
 
-def parse_stream_payload(data: bytes) -> dict[str, Any]:
-    """Parse the 237-byte stream payload into a header + list of samples."""
+def parse_stream_payload(
+    data: bytes,
+    sampling_rate: float | None = None,
+) -> dict[str, Any]:
+    """Parse the 237-byte stream payload into a header + list of samples.
+
+    When *sampling_rate* (Hz) is provided, each sample dict receives a
+    ``"timestamp"`` key with the interpolated time for that individual sample.
+    The packet header timestamp is treated as the time of the **first** sample;
+    subsequent buffered samples are spaced at ``1 / sampling_rate`` intervals.
+    """
     header = StreamHeader.from_bytes(data[:10])
     samples: list[dict[str, float]] = []
 
@@ -280,6 +296,11 @@ def parse_stream_payload(data: bytes) -> dict[str, Any]:
         samples = _parse_mixed_sample(data, header)
     elif header.data_mode == CoreInterfaceParser.DataMode.QuatMag:
         samples = _parse_quat_mag_sample(data, header)
+
+    if sampling_rate is not None and sampling_rate > 0:
+        interval = timedelta(seconds=1.0 / sampling_rate)
+        for i, s in enumerate(samples):
+            s["timestamp"] = header.timestamp + i * interval
 
     return {"header": header, "samples": samples}
 

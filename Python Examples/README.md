@@ -22,6 +22,9 @@ python stream_example.py
 
 # Stream for a custom duration
 python stream_example.py --duration 30
+
+# Stream at 200 Hz with per-sample timestamps
+python stream_example.py --rate 200 --duration 10
 ```
 
 ## Files
@@ -49,19 +52,33 @@ import asyncio
 from qsense_ble import QSenseBleClient
 
 async def main():
-    client = QSenseBleClient()
+    # Pass sampling_rate for per-sample timestamps (essential at high rates)
+    client = QSenseBleClient(sampling_rate=200)
     await client.scan()
     await client.connect()
 
     async for frame in client.stream(duration=10):
-        header = frame["header"]
         for sample in frame["samples"]:
-            print(sample)
+            print(sample["timestamp"], sample)
 
     await client.disconnect()
 
 asyncio.run(main())
 ```
+
+## High-Rate Streaming (200 Hz)
+
+At high sampling rates the sensor **buffers** multiple samples per BLE packet
+(e.g. 12 raw samples at 200 Hz).  Pass `sampling_rate` to get **per-sample
+timestamps** interpolated from the packet header:
+
+```python
+client = QSenseBleClient(sampling_rate=200)
+```
+
+Without `sampling_rate`, all samples in a packet share the same header
+timestamp.  See [`SPEC.md`](SPEC.md) §6 for details on buffering, timestamp
+interpolation, and BLE connection interval tuning.
 
 ## Protocol Summary
 

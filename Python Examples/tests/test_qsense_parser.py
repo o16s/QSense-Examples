@@ -2,6 +2,7 @@ import struct
 import pytest
 import sys
 import os
+from datetime import datetime, timedelta
 
 # Allow imports from parent directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -241,3 +242,87 @@ class TestParseStreamPayload:
         assert len(result["samples"]) == 1
         s = result["samples"][0]
         assert "q0" in s and "q1" in s and "q2" in s and "q3" in s
+
+
+# ---------------------------------------------------------------------------
+# Per-sample timestamps (high-rate streaming)
+# ---------------------------------------------------------------------------
+
+class TestPerSampleTimestamps:
+    @staticmethod
+    def _make_raw_stream_data(
+        mode=1,
+        buffering=1,
+        acc_idx=0,
+        gyr_idx=0,
+        seconds=1000,
+        sub_seconds=0,
+    ) -> bytes:
+        """Build a 237-byte stream payload with configurable header timestamp."""
+        data = bytearray(237)
+        data[0] = (buffering << 4) | (mode & 0x0F)
+        struct.pack_into("<I", data, 1, seconds)
+        struct.pack_into("<H", data, 5, sub_seconds)
+        data[9] = (acc_idx << 4) | (gyr_idx << 1)
+        # Write raw samples (9 × int16 each) starting at offset 10
+        for j in range(buffering):
+            for i in range(9):
+                struct.pack_into("<h", data, 10 + j * 18 + i * 2, (i + 1) * 100)
+        return bytes(data)
+
+    def test_no_sampling_rate_gives_no_per_sample_timestamp(self):
+        """Without sampling_rate, samples should not have a 'timestamp' key."""
+        data = self._make_raw_stream_data(buffering=3)
+        result = parse_stream_payload(data)
+        assert len(result["samples"]) == 3
+        for s in result["samples"]:
+            assert "timestamp" not in s
+
+    def test_single_sample_gets_header_timestamp(self):
+        """With buffering=1 and a sampling_rate, the single sample gets the header timestamp."""
+        data = self._make_raw_stream_data(buffering=1, seconds=1000, sub_seconds=0)
+        result = parse_stream_payload(data, sampling_rate=200)
+        assert len(result["samples"]) == 1
+        expected = datetime(1970, 1, 1) + timedelta(seconds=1000)
+        assert result["samples"][0]["timestamp"] == expected
+
+    def test_buffered_samples_get_interpolated_timestamps(self):
+        """With buffering=4 at 200Hz, samples should be 5ms apart."""
+        data = self._make_raw_stream_data(buffering=4, seconds=1000, sub_seconds=0)
+        result = parse_stream_payload(data, sampling_rate=200)
+        assert len(result["samples"]) == 4
+        base = datetime(1970, 1, 1) + timedelta(seconds=1000)
+        interval = timedelta(seconds=1.0 / 200)
+        for i, s in enumerate(result["samples"]):
+            assert s["timestamp"] == base + i * interval
+
+    def test_200hz_12x_buffering_timestamps(self):
+        """Simulate realistic 200Hz raw streaming with buffering=12."""
+        data = self._make_raw_stream_data(
+            buffering=12, seconds=1700000000, sub_seconds=400
+        )
+        result = parse_stream_payload(data, sampling_rate=200)
+        assert len(result["samples"]) == 12
+        base = result["header"].timestamp
+        interval = timedelta(seconds=1.0 / 200)
+        for i, s in enumerate(result["samples"]):
+            expected_ts = base + i * interval
+            assert s["timestamp"] == expected_ts
+        # Total span should be (12-1) * 5ms = 55ms
+        span = result["samples"][-1]["timestamp"] - result["samples"][0]["timestamp"]
+        assert span == pytest.approx(timedelta(milliseconds=55))
+
+    def test_quat_mode_per_sample_timestamps(self):
+        """Quaternion mode with buffering also gets per-sample timestamps."""
+        data = bytearray(237)
+        data[0] = (3 << 4) | 2  # buffering=3, mode=Quat
+        struct.pack_into("<I", data, 1, 5000)
+        struct.pack_into("<H", data, 5, 0)
+        for j in range(3):
+            for i in range(4):
+                struct.pack_into("<h", data, 10 + j * 8 + i * 2, 1000)
+        result = parse_stream_payload(bytes(data), sampling_rate=100)
+        assert len(result["samples"]) == 3
+        base = datetime(1970, 1, 1) + timedelta(seconds=5000)
+        for i, s in enumerate(result["samples"]):
+            assert s["timestamp"] == base + i * timedelta(seconds=0.01)

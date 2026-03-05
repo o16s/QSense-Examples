@@ -158,7 +158,52 @@ All multi-byte sensor values are **signed 16-bit little-endian** integers.
 
 ---
 
-## 6  Module Design
+## 6  High-Rate Streaming (e.g. 200 Hz)
+
+### 6.1  Buffering
+
+At high sampling rates the sensor **buffers** multiple samples into each BLE
+notification to reduce radio overhead.  The **buffering factor** is encoded in
+the upper nibble of stream payload byte 0 (see §4.1).
+
+For example, in **Raw mode** (18 bytes/sample), the 237-byte payload has
+227 usable bytes after the 10-byte header, giving a maximum of
+**⌊227 / 18⌋ = 12 samples per packet**.  At 200 Hz with buffering = 12 the
+sensor sends ≈ 16.7 packets/s — well within BLE throughput limits.
+
+### 6.2  Per-Sample Timestamps
+
+Each stream packet carries **one** header timestamp (§4.1).  When the
+buffering factor > 1 every sample within the packet was captured at a
+different physical time.
+
+When `sampling_rate` is provided to `parse_stream_payload()` or to
+`QSenseBleClient`, the library **interpolates** a per-sample timestamp:
+
+```
+sample[i].timestamp = header.timestamp + i × (1 / sampling_rate)
+```
+
+The header timestamp is treated as the time of the **first** sample;
+subsequent samples are spaced at `1 / sampling_rate` intervals.
+
+Without a `sampling_rate` the sample dicts contain no `"timestamp"` key
+and only the header-level timestamp is available.
+
+### 6.3  BLE Connection Interval
+
+BLE throughput depends on the **connection interval** negotiated between host
+and sensor.  On a Raspberry Pi (BlueZ), the default may be too slow for high
+rates.  If you observe data loss:
+
+1. Request a shorter connection interval via BlueZ (7.5 – 15 ms is ideal).
+2. Ensure no other BLE-intensive peripherals compete for airtime.
+3. Keep the Raspberry Pi physically close to the sensor (< 2 m for best
+   results).
+
+---
+
+## 7  Module Design
 
 The Python Examples folder contains:
 
@@ -174,7 +219,7 @@ The Python Examples folder contains:
 
 ---
 
-## 7  Testing Strategy (TDD)
+## 8  Testing Strategy (TDD)
 
 1. **Red** — write tests against the public API of `qsense_parser` and
    `qsense_ble` before any implementation exists.
@@ -186,19 +231,21 @@ to simulate `bleak` without real hardware.
 
 ---
 
-## 8  Example Usage
+## 9  Example Usage
 
 ```python
 import asyncio
 from qsense_ble import QSenseBleClient
 
 async def main():
-    client = QSenseBleClient()
+    # Pass sampling_rate for per-sample timestamps at high rates
+    client = QSenseBleClient(sampling_rate=200)
     await client.scan()
     await client.connect()
 
     async for frame in client.stream(duration=10):
-        print(frame)
+        for sample in frame["samples"]:
+            print(sample["timestamp"], sample)
 
     await client.disconnect()
 
@@ -207,7 +254,7 @@ asyncio.run(main())
 
 ---
 
-## 9  References
+## 10  References
 
 - `Sensor Interfaces/QSense-Sensor-Interface-v3.pdf` — full protocol specification
 - `Sensor Interfaces/CoreInterfaceParser.py` — reference Python parser
