@@ -69,6 +69,8 @@ class QSenseBleClient:
         device : BLE device object or None
             A specific device returned by :meth:`scan`.  When *None*, the
             first device discovered during the last :meth:`scan` call is used.
+            When a device is provided, it replaces the stored device so that
+            any subsequent reconnect without arguments targets the same sensor.
         """
         target = device if device is not None else self._device
         if target is None:

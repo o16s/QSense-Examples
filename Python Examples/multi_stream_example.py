@@ -74,8 +74,6 @@ async def main(duration: float, sampling_rate: float | None) -> None:
         ))
     except KeyboardInterrupt:
         print("\nStopped by user.")
-        for _, client in clients:
-            await client.stop_streaming()
 
     # 4. Disconnect all.
     for label, client in clients:

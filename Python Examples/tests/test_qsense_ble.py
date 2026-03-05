@@ -174,8 +174,8 @@ class TestMultiDevice:
         client_a = QSenseBleClient()
         client_b = QSenseBleClient()
 
-        received_a: list = []
-        received_b: list = []
+        received_a: list[dict] = []
+        received_b: list[dict] = []
         client_a.on_stream_data = lambda frame: received_a.append(frame)
         client_b.on_stream_data = lambda frame: received_b.append(frame)
 
