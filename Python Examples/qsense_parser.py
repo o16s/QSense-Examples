@@ -5,6 +5,8 @@ This module contains no BLE or I/O dependencies, so it can be fully unit-tested
 without hardware.
 """
 
+from __future__ import annotations
+
 import struct
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta

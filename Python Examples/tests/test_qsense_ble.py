@@ -1,7 +1,8 @@
 import struct
 import pytest
 import asyncio
-import sys, os
+import sys
+import os
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 # Allow imports from parent directory

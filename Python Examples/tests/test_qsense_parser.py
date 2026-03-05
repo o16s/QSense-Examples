@@ -1,6 +1,7 @@
 import struct
 import pytest
-import sys, os
+import sys
+import os
 
 # Allow imports from parent directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
